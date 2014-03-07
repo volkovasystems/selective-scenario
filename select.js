@@ -1,7 +1,9 @@
 /*:
 	@include:
 		{
-			"generate-random-mean-time": "generateRandomMeanTime"
+			"generate-random-mean-time": "generateRandomMeanTime",
+			"collection-contains": "collectionContains",
+			"collection-empty": "collectionEmpty"
 		}
 	@end-include
 */
@@ -60,12 +62,15 @@ select = function select( value, cases, callback ){
 		"value": value
 	};
 	var processes = [ ];
+	var processQueue = { };
+	
 	var killProcesses = function killProcesses( callback ){
 		for( var index = 0; index < processes.length; index++ ){
 			clearTimeout( processes[ index ] );
 		}
 		callback(  );
-	}	
+	}
+
 	var redirect = function redirect( error, state ){
 		var namespace = this.namespace;
 		if( error ){
@@ -84,35 +89,44 @@ select = function select( value, cases, callback ){
 		}
 
 		if( typeof state == "string" ){
-
+			traverseScenarios( [ state ] );
 		}else if( state instanceof Array ){
-
+			traverseScenarios( state );
 		}else{
-
+			traverseScenarios( );
 		}
 	};
 
-	var processQueue = { };
-
-	for( var in dex = 0; index < cases.length; index++ ){
-		processes.push( setTimeout( function process( index ){
-			var thisCase = cases[ index ];
-			if( !( "namespace" in thisCase ) ){
-				thisCase.namespace = generateRandomMeanTime( );
-			}
-			var namespace = thisCase.namespace;
-			var condition = thisCase.condition;
-			var scenario = thisCase.scenario;
-			if( condition( scope, 
+	var executeCase = function executeCase( scope, namespace, condition, scenario ){
+		if( condition( scope,
+			function subRedirect( error, state ){
+				redirect.call( { "namespace": namespace }, error, state );
+			} ) )
+		{
+			scenario( scope,
 				function subRedirect( error, state ){
 					redirect.call( { "namespace": namespace }, error, state );
-				} ) )
-			{
-				scenario( scope,
-					function subRedirect( error, state ){
-						redirect.call( { "namespace": namespace }, error, state );
-					} );
-			}
-		}, 0, index ) );
-	}
+				} );
+		}
+	};
+
+	var traverseScenarios = function traverseScenarios( selectedCases ){
+		for( var index = 0; index < cases.length; index++ ){
+			processes.push( setTimeout( function process( index, selectedCases ){
+				var thisCase = cases[ index ];
+				if( !( "namespace" in thisCase ) ){
+					thisCase.namespace = "case:" + generateRandomMeanTime( );
+				}
+				var namespace = thisCase.namespace;
+				var condition = thisCase.condition;
+				var scenario = thisCase.scenario;
+				if( collectionContains( selectedCases, namespace ) ){
+					executeCase( namespace, condition, scenario );
+				}else if( !collectionEmpty( selectedCases ) ){
+					executeCase( namespace, condition, scenario );
+				}
+			}, 0, index, selectedCases ) );
+		}	
+	};
+	traverseScenarios( );
 };
